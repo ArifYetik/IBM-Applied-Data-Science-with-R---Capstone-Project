@@ -1,0 +1,243 @@
+---
+title: "Predict Hourly Rented Bike Count using Basic Linear Regression Models"
+author: "Arif Y."
+date: '2022-04-14'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Predict Hourly Rented Bike Count using Basic Linear Regression ModelsPredict Hourly Rented Bike Count using Basic Linear Regression Models## Lab Overview:
+
+Now that you have performed exploratory analysis on the bike sharing demand dataset and obtained some insights on the attributes, it's time to build predictive models to predict the hourly rented bike count using related weather and date information.
+
+In this lab, you will be asked to use tidymodels to build some baseline linear regression models:
+
+  - TASK: Split data into training and testing datasets
+  - TASK: Build a linear regression model using only the weather variables
+  - TASK: Build a linear regression model using both weather and date variables
+  - TASK: Evaluate the models and identify important variables
+
+Let's start!
+First install and import the necessary libraries
+
+```{r }
+library(tidymodels)
+library(tidyverse)
+library(stringr)
+library(rlang)
+library(ggthemes)
+```
+
+```{r}
+"C:/Users/4/Documents"
+```
+
+
+```{r}
+# Dataset URL
+dataset_url <- "https://cf-courses-data.s3.us.cloud-object-storage.appdomain.cloud/IBMDeveloperSkillsNetwork-RP0321EN-SkillsNetwork/labs/datasets/seoul_bike_sharing_converted_normalized.csv"
+bike_sharing_df <- read_csv(dataset_url)
+
+bike_sharing_df <- bike_sharing_df %>% 
+                   select(-DATE, -FUNCTIONING_DAY)
+
+head(bike_sharing_df)
+```
+
+
+
+
+## TASK: Split training and testing data
+First, we need to split the full dataset into training and testing datasets.
+
+The training dataset will be used for fitting regression models, and the testing dataset will be used to evaluate the trained models.
+
+TODO: Use the initial_split(), training(), and testing() functions to generate a training dataset consisting of 75% of the original dataset, and a testing dataset using the remaining 25%.
+
+
+```{r}
+# Use the `initial_split()`, `training()`, and `testing()` functions to split the dataset
+set.seed(12345)
+
+seoul_bike_split <- initial_split (bike_sharing_df, prop=0.75)	
+
+train_data=training(seoul_bike_split)
+
+test_data=testing(seoul_bike_split)
+```
+
+
+## TASK: Build a linear regression model using weather variables only
+As you could imagine, weather conditions may affect people's bike renting decisions. For example, on a cold and rainy day, you may choose alternate transportation such as a bus or taxi. While on a nice sunny day, you may want to rent a bike for a short-distance travel.
+
+Thus, can we predict a city's bike-sharing demand based on its local weather information? Let's try to build a regression model to do that.
+
+TODO: Build a linear regression model called lm_model_weather using the following variables:
+
+```{r}
+# Fit the model called `lm_model_weather`
+
+lm_model_weather <- lm(RENTED_BIKE_COUNT ~ TEMPERATURE + HUMIDITY + WIND_SPEED + VISIBILITY  + SOLAR_RADIATION + RAINFALL + SNOWFALL, data = train_data)
+
+summary(lm_model_weather)
+```
+
+
+
+
+## TASK: Build a linear regression model using all variables
+In addition to weather, there could be other factors that may affect bike rental demand, such as the time of a day or if today is a holiday or not.
+
+Next, let's build a linear regression model using all variables (weather + date/time) in this task.
+
+TODO: Build a linear regression model called lm_model_all using all variables RENTED_BIKE_COUNT ~ .
+
+
+```{r}
+# Fit the model called "lm_model_all"
+# "RENTED_BIKE_COUNT ~ ." means use all other variables except for the response variable
+
+lm_model_all <- lm(RENTED_BIKE_COUNT~., data = train_data)
+
+summary(lm_model_all)
+
+```
+
+```{r}
+# Get the coefficient-level elements of the model
+tidy(lm_model_all)
+```
+
+
+```{r}
+# Get the observation-level elements of the model
+augment(lm_model_all)
+```
+
+
+```{r}
+# Get the model-level elements of the model
+glance(lm_model_all)
+```
+
+
+
+
+Now you have built two basic linear regression models with different predictor variables, let's evaluate which model has better performance,
+
+## TASK: Model evaluation and identification of important variables
+Now that you have built two regression models, lm_model_weather and lm_model_all, with different predictor variables, you need to compare their performance to see which one is better.
+
+In this project, you will be asked to use very important metrics that are often used in Statistics to determine the performance of a model:
+
+  - R^2 / R-squared
+  - Root Mean Squared Error (RMSE)
+
+```{r}
+test_result_weather <- test_data %>% 
+  select(RENTED_BIKE_COUNT) %>% 
+  mutate(data.frame(predicted=c(predict(lm_model_weather, test_data))))
+
+test_result_weather <- rename(test_result_weather, Truth = "RENTED_BIKE_COUNT", Predicted = predicted)
+
+
+test_result_all <- test_data %>% 
+  select(RENTED_BIKE_COUNT) %>% 
+  mutate(data.frame(predicted=c(predict(lm_model_all, test_data))))
+
+test_result_all <- rename(test_result_all, Truth = "RENTED_BIKE_COUNT", Predicted = predicted)
+```
+
+NOTE: if you happen to see a warning like : prediction from a rank-deficient fit may be misleading, it may be casued by collinearity in the predictor variables. Collinearity means that one predictor variable can be predicted from other predictor variables to some degree. For example, RAINFALL could be predicted by HUMIDITY.
+
+But dont worry, you will address glmnet models (Lasso and Elastic-Net Regularized Generalized Linear Models) instead of regular regression models to solve this issue and futher improve the model performance.
+
+Next, let's calculate and print the R-squared and RMSE for the two test results
+
+TODO: Use rsq() and rmse() functions to calculate R-squared and RMSE metrics for the two test results
+
+```{r}
+# Find out R-squared and RMSE for 2 models
+# lm_model_weather model:
+rmse(test_result_weather,Truth,Predicted)
+rsq(test_result_weather,Truth,Predicted)
+
+# lm_model_all model:
+rmse(test_result_all,Truth,Predicted)
+rsq(test_result_all,Truth,Predicted)
+```
+
+lm_model_all are better as it has a lower RMSE and larger R-square.
+
+RMSE=376, R-Square=0.663
+
+It means that, if both weather and datetime variables are involved in model, will generates better prediction results.
+
+
+### Variables Coefficient
+Next part will check which independent variables have larger coefficients. Larger coefficients in the model means they contribute more in the prediction of RENTED_BIKE_COUNT.
+*Note: Since all predictor variables are normalized to the same scale, 0 to 1, we thus can compare their coefficients directly. But before that, let's get rownames of the dataframe lm_model_all coefficients.
+
+```{r}
+lm_model_all$coefficients
+```
+
+hmm, it's not very clear to compare the coefficients from a long and unsorted list. Next, you need to sort and visualize them using a bar chart
+
+TODO: Sort the coefficient list in descending order and visualize the result using ggplot and geom_bar
+
+
+```{r}
+row_name <- rownames(data.frame(lm_model_all$coefficients))
+
+lm_all_abs_coefficient <- data.frame(coefficient=c(abs(lm_model_all$coefficients)))
+
+coefficient_df <- cbind(row_name,lm_all_abs_coefficient)
+
+row.names(coefficient_df) <- c(1:39)
+
+coefficient_df <- coefficient_df %>% arrange(desc(coefficient))
+
+# Note: rownames is used to get the row name of df, and then combine it with absolute value of coefficient, to form a new df) 
+
+# Visualize the list using ggplot and geom_bar
+ggplot(coefficient_df) + geom_col(aes(x = coefficient, y = reorder(row_name,coefficient,sum))) +
+  labs(title="Absolute Coefficient of Linear Regression Model (Using all variables)") +
+  xlab("Coefficient Value") + ylab("Independent Variables")
+
+```
+
+Mark down these 'top-ranked variables by coefficient', which will be used for model refinments in the next labs.
+
+Note that here the main reason we use absolute value is to easily identify important variables, i.e. variables with large magnitudes, no matter it's negative or positive. If we want to interprete the model then it's better to seperate the positive and negative coefficients.
+
+
+**Summary** 
+From the above analysis result, Rainfall, Humidity and Temperature are the 3 most important factors for bike rental number in Seoul city. As these factors are varying across seasons, it also explains the reason of seasonality pattern observed in our analysis.
+
+In the next part, a dashboard will be setup using R Shiny. This will act as a prediction for the bike numbers of different cities.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,454 @@
+---
+title: "Refine the Baseline Regression Models"
+author: "Arif Y."
+date: '2022-04-15'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Lab Overview:
+Now you have built a baseline regression model with some relatively good RMSE and R-squared reported values. However, we could still improve it by using methods like adding polynomial and interaction terms, regularization, and so on.
+
+In this lab, you will be asked to continue using tidymodels to improve the performance of baseline model:
+
+TASK: Add polynomial terms
+TASK: Add interactions terms
+TASK: Add regularizations terms
+TASK: Experiment to search for improved models
+Let's start!
+
+First install and import necessary libraries
+
+```{r}
+library("tidymodels")
+library("tidyverse")
+library("stringr")
+```
+
+
+The processed Seoul bike sharing dataset seoul_bike_sharing_converted_normalized.csv, includes the converted indicator variables, and the numerical variables have been normalized. Let's read it as a dataframe first:
+
+```{r}
+# Dataset URL
+dataset_url <- "https://cf-courses-data.s3.us.cloud-object-storage.appdomain.cloud/IBMDeveloperSkillsNetwork-RP0321EN-SkillsNetwork/labs/datasets/seoul_bike_sharing_converted_normalized.csv"
+bike_sharing_df <- read_csv(dataset_url)
+spec(bike_sharing_df)
+head(bike_sharing_df)
+```
+
+
+We won't be using the DATE column, because 'as is', it basically acts like an data entry index. (However, given more time, we could use the DATE colum to create a 'day of week' or 'isWeekend' column, which we might expect has an affect on preferred bike rental times.) We also do not need the FUNCTIONAL DAY column because it only has one distinct value remaining (YES) after missing value processing.
+```{r}
+bike_sharing_df <- bike_sharing_df %>% select(-DATE, -FUNCTIONING_DAY)
+```
+
+
+Define a linear regression model specification.
+```{r}
+lm_spec <- linear_reg() %>%
+  set_engine("lm") %>% 
+  set_mode("regression")
+```
+
+Split the data into training and testing datasets.
+```{r}
+set.seed(1234)
+data_split <- initial_split(bike_sharing_df, prop = 4/5)
+train_data <- training(data_split)
+test_data <- testing(data_split)
+```
+
+
+Now we are ready to refine the previous baseline regression model.
+
+## TASK: Add polynomial terms
+Linear regression models are the most suitable models to capture the linear correlations among variables. However, in real world data, many relationships may be non-linear.
+
+For example, the correlation between RENTED_BIKE_COUNT and TEMPERATURE does not look like linear:
+
+```{r}
+ggplot(data = train_data, aes(RENTED_BIKE_COUNT, TEMPERATURE)) + 
+    geom_jitter() 
+```
+One solution to handle such nonlinearity is using polynomial regression by adding polynomial terms. As shown before, higher order polynomials are better than the first order polynomial.  
+
+```{r}
+# Plot the higher order polynomial fits
+ggplot(data=train_data, aes(RENTED_BIKE_COUNT, TEMPERATURE)) + 
+    geom_jitter() + 
+    geom_smooth(method = "lm", formula = y ~ x, color="red") + 
+    geom_smooth(method = "lm", formula = y ~ poly(x, 2), color="yellow") + 
+    geom_smooth(method = "lm", formula = y ~ poly(x, 4), color="green") + 
+    geom_smooth(method = "lm", formula = y ~ poly(x, 6), color="blue")
+```
+
+OK, let's add some higher order polynomials of important variables to the regression models
+
+TODO: Fit a linear regression model lm_poly with higher order polynomial terms on the important variables (larger coefficients) found in the baseline model
+
+```{r}
+# Fit a linear model with higher order polynomial on some important variables 
+# HINT: Use ploy function to build polynomial terms, lm_poly <- RENTED_BIKE_COUNT ~ poly(TEMPERATURE, 6) + poly(HUMIDITY, 4) .....
+
+lm_poly <- lm_spec %>% fit(RENTED_BIKE_COUNT ~ poly(TEMPERATURE, 6) + poly(HUMIDITY, 4) + poly(RAINFALL, 6) + poly(DEW_POINT_TEMPERATURE, 4) + poly(SOLAR_RADIATION, 4) + poly(SNOWFALL, 6) + poly(VISIBILITY, 6) + WIND_SPEED + HOLIDAY +  WINTER + SPRING + SUMMER + AUTUMN +  `0`+ `1` + `2` + `3` + `4` + `5` + `6`  + `11` +`12` + `13` + `14` + `15` + `16` + `17` + `18` + `19` + `20` + `21` + `22` + `23`, data = train_data)
+
+summary(lm_poly$fit)
+```
+Temp, Humidity, Rainfall, Solar radiation, Visibility,snowfall
+
+TODO: Make predictions on test dataset using the lm_poly models
+```{r}
+# Use predict() function to generate test results for `lm_poly`
+test_results <- lm_poly %>%
+  # Make the predictions and save the predicted values
+  predict(new_data = test_data) %>%
+  # Create a new column to save the true values
+  mutate(truth = test_data$RENTED_BIKE_COUNT)
+
+head(test_results)
+```
+
+
+
+
+Another minor improvement we could do here is to convert all negative prediction results to zero, because we can not have negative rented bike counts
+```{r}
+# e.g., test_results[test_results<0] <- 0
+test_results[test_results<0] <- 0
+
+# calculate R-squared and RMSE for the test results generated by lm_ploy model
+rmse(test_results, truth = truth, estimate = .pred)
+rsq(test_results, truth = truth, estimate = .pred)
+```
+
+
+
+## TASK: Add interaction terms
+In real-world scenarios, in addition to non-linear relationships between response variables and predictor variables, you may also encounter relationships among variables called interaction effects.
+
+For example, the effect of predictor variable TEMPERATURE on RENTED_BIKE_COUNT may also depend on other variables such as HUMIDITY, RAINFALL, or both (they interact) and the effect of SEASON on RENTED_BIKE_COUNT may also depend on HOLIDAY, HOUR, or both.
+
+To capture such interaction effects, we could add some interaction terms such as RAINFALL*HUMIDITY to the regression model, similar to what we did with polynominal terms. In this task, you will explore and conduct some experiments to search for interaction terms which will improve the model performance.
+
+TODO: Try adding some interaction terms to the previous polynomial models.
+
+```{r}
+# Add interaction terms to the poly regression built in previous step
+# HINT: You could use `*` operator to create interaction terms such as HUMIDITY*TEMPERATURE and make the formula look like:
+# RENTED_BIKE_COUNT ~ RAINFALL*HUMIDITY ...
+lm_interaction <- lm_spec %>% fit(RENTED_BIKE_COUNT ~ TEMPERATURE + DEW_POINT_TEMPERATURE + DEW_POINT_TEMPERATURE*HUMIDITY + HUMIDITY + HUMIDITY*TEMPERATURE + RAINFALL + RAINFALL*HUMIDITY +SOLAR_RADIATION + SNOWFALL + SNOWFALL*WINTER + VISIBILITY + WIND_SPEED + HOLIDAY +  WINTER + SPRING + SUMMER + AUTUMN +  `0`+ `1` + `2` + `3` + `4` + `5` + `6`  + `11` +`12` + `13` + `14` + `15` + `16` + `17` + `18` + `19` + `20` + `21` + `22` + `23`, data = train_data)
+
+# Print model summary
+summary(lm_interaction$fit)
+```
+
+```{r}
+# Use predict() function to generate test results for `lm_interaction`
+test_int <- lm_interaction %>%
+  # Make the predictions and save the predicted values
+  predict(new_data = test_data) %>%
+  # Create a new column to save the true values
+  mutate(truth = test_data$RENTED_BIKE_COUNT)
+head(test_int)
+
+# Calculate R-squared and RMSE for the new model to see if performance has improved
+rmse(test_int, truth = truth, estimate = .pred)
+
+rsq(test_int, truth = truth, estimate = .pred)
+```
+
+
+
+## ASK: Add regularization
+In previous tasks, you were asked to add polynominal and interaction terms to the model, aiming to capture nonlinearity and interaction effects between the predictor variables. Hopefully, your updated models have better R-squared and RMSE values.
+
+However, adding these terms makes your model more complicated, more difficult to explain, and more likely to suffer from overfitting. To overcome these issues, one solution is to add regularization terms to your models.
+
+When building the baseline model, we used the basic lm engine. In this task, you will use a more advanced and generalized glmnet engine. It provides a generalized linear model with Lasso, Ridge, and Elastic Net regularizations.
+
+In general, using glmnet can enhance your models in the following ways:
+
+  - Address overfitting issues by shrinking the coefficients
+  - Address predictor variable colinearity by selecting only one variable from each group of colinear variables (by        - shrinking their coefficients to zero)
+  
+Make your models more interpretable due to simplification (fewer variables in the outcome models)
+Now, let's switch our regression engine to glmnet
+
+TODO: Define a linear regression model specification glmnet_spec using glmnet engine
+
+```{r}
+library('glmnet')
+
+# - penalty controls the intensity of model regularization
+# - mixture controls the tradeoff between L1 and L2 regularizations
+# You could manually try different parameter combinations or use grid search to find optimal combinations
+glmnet_spec <- linear_reg(penalty = 0.1, mixture = 0) %>% set_engine("glmnet") 
+bike_recipe <- recipe(RENTED_BIKE_COUNT ~ ., data = train_data)
+```
+
+
+```{r}
+ridge_wf <- workflow() %>%
+  add_recipe(bike_recipe)
+
+ridge_fit <- ridge_wf %>%
+  add_model(glmnet_spec) %>%
+  fit(data = train_data)
+pull_workflow_fit(ridge_fit) %>% tidy()
+
+```
+
+
+
+```{r}
+lasso_spec <- linear_reg(penalty = 0.1, mixture = 1) %>%
+  set_engine("glmnet")
+
+lasso_wf <- workflow() %>%
+  add_recipe(bike_recipe)
+
+lasso_fit <- lasso_wf %>%
+  add_model(lasso_spec) %>%
+  fit(data = train_data)
+pull_workflow_fit(lasso_fit) %>% tidy()
+
+```
+
+
+
+```{r}
+elasticnet_spec <- linear_reg(penalty = 0.1, mixture = 0.3) %>%
+  set_engine("glmnet")
+
+elasticnet_wf <- workflow() %>%
+  add_recipe(bike_recipe)
+  
+elasticnet_fit <- elasticnet_wf %>%
+  add_model(elasticnet_spec) %>%
+  fit(data = train_data)
+pull_workflow_fit(elasticnet_fit) %>% tidy()
+```
+
+
+
+## TASK: Experiment to search for improved models
+Now you understand some of the methods that you can use to try to improve your models.
+
+TODO: Experiment by building and testing at least five different models. For each of your experiments, include polynomial terms, interaction terms, and one of the three regularizations we introduced.
+
+
+```{r}
+# polynomial terms model
+test_poly <- lm_poly %>%
+  predict(new_data = test_data) %>%
+  mutate(truth = test_data$RENTED_BIKE_COUNT)
+head(test_poly)
+
+# calculate R-squared and RMSE for the test results generated by lm_ploy model
+rmse(test_poly, truth = truth, estimate = .pred)
+rsq(test_poly, truth = truth, estimate = .pred)
+```
+
+
+
+```{r}
+# interaction terms model
+test_int <- lm_interaction %>%
+  predict(new_data = test_data) %>%
+  mutate(truth = test_data$RENTED_BIKE_COUNT)
+head(test_int)
+
+# Calculate R-squared and RMSE for the new model to see if performance has improved
+rmse(test_int, truth = truth, estimate = .pred)
+rsq(test_int, truth = truth, estimate = .pred)
+```
+
+
+
+```{r}
+# Ridge (L2) regularization model
+test_ridge <- ridge_fit %>%
+   predict(new_data = test_data) %>%
+   mutate(truth = test_data$RENTED_BIKE_COUNT)
+head(test_ridge)
+# Calculate R-squared and RMSE for the new model to see if performance has improved
+rmse(test_ridge, truth = truth, estimate = .pred)
+rsq(test_ridge, truth = truth, estimate = .pred)
+```
+
+
+
+```{r}
+# Lasso (L1) regularization model
+test_lasso <- lasso_fit %>%
+   predict(new_data = test_data) %>%
+   mutate(truth = test_data$RENTED_BIKE_COUNT)
+head(test_lasso)
+# Calculate R-squared and RMSE for the new model to see if performance has improved
+rmse(test_lasso, truth = truth, estimate = .pred)
+rsq(test_lasso, truth = truth, estimate = .pred)
+```
+
+
+
+```{r}
+# Elastic Net (L1 and L2) Regularization
+test_elasticnet <- elasticnet_fit %>%
+   predict(new_data = test_data) %>%
+   mutate(truth = test_data$RENTED_BIKE_COUNT)
+head(test_elasticnet)
+# Calculate R-squared and RMSE for the new model to see if performance has improved
+rmse(test_elasticnet, truth = truth, estimate = .pred)
+rsq(test_elasticnet, truth = truth, estimate = .pred)
+```
+
+
+
+
+```{r}
+model_df <- data.frame(
+  models = c("polynomial", "interaction",  "Ridge", "Lasso", "Elastic_Net"),
+  RMSE = c(326.49, 374.08, 365.05, 364.03, 364.04),
+  R_squared = c(0.734, 0.6506, 0.6692, 0.6692117, 0.6692))
+model_df
+```
+
+Here are the performance requirements for your best model:
+
+The RMSE should be less than 330 (rougly 10% of the max value in test dataset)
+R-squared should be greater than 0.72
+
+TODO: Visualize the saved RMSE and R-squared values using a grouped barchart
+
+```{r}
+# HINT: Use ggplot() + geom_bar()
+ggplot(model_df, aes(models, RMSE)) + geom_bar(stat = "identity", col="orange", fill = "aquamarine") + 
+  geom_hline(yintercept=330)
+
+ggplot(model_df, aes(models, R_squared)) + geom_bar(stat="summary", col="orange", fill = "aquamarine") + geom_hline(yintercept=0.72) + ylim(0, 1)
+
+```
+
+TODO: Create a Q-Q plot by plotting the distribution difference between the predictions generated by your best model and the true values on the test dataset.
+
+```{r}
+# HINT: Use 
+ggplot(test_poly) +
+   stat_qq(aes(sample=truth), color='green') +
+   stat_qq(aes(sample=.pred), color='red')
+```
+
+
+
+
+
+
+
+
+
+
+## Grid Search
+The goal of grid search is to find the values of the hyperparameters that results in the best model. This is known as tuning hyperparameters. Hyperparameters are parameters that are not derived from training the model. For example: 𝜆 (or lambda) in ridge/lasso is a hyperparameter.
+
+Grid search takes a list of values for each hyperparameter it is tuning and iterates through each combination. It then uses every combination of parameters to produce a model. For each model, a metric like RMSE is calculated. You then determine the best value of the hyperparameters by choosing the model with the best RMSE. In R, you can use functions in tidymodels to run grid search.
+
+First, define the lasso model. In this example, we will be tuning a lasso model so mixture = 1. We will tune lambda, which is penalty in the function.
+
+```{r}
+tune_spec <- linear_reg(penalty = tune(), mixture = 1) %>% 
+  set_engine("glmnet")
+
+lasso_wf <- workflow() %>%
+  add_recipe(bike_recipe)
+```
+
+Next, define cross validation to resample the data:
+```{r}
+bike_cvfolds <- vfold_cv(train_data)
+```
+
+
+Now, you can set up the grid using grid_regular(). The levels are how many values to use and in penalty() you can specify the range of values to use. By default, the range values are inverse log transformed. This means that  −3  is really  10−3  and  0.3  is really  100.3 .
+```{r}
+lambda_grid <- grid_regular(levels = 50,
+  penalty(range = c(-3, 0.3)))
+```
+
+To tune the grid, use tune_grid() and include the lambda grid just specified.
+```{r}
+lasso_grid <- tune_grid(
+    lasso_wf %>% add_model(tune_spec), 
+    resamples = bike_cvfolds, 
+    grid = lambda_grid)
+```
+
+
+Finally, to view best results:
+```{r}
+show_best(lasso_grid, metric = "rmse")
+```
+
+
+From the table and using RMSE as the metric, using lambda (penalty) equal to 1.46 gives the best result.
+
+Additionally, to visualize the RMSE results:
+```{r}
+lasso_grid %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  ggplot(aes(penalty, mean)) +
+  geom_line(size=1, color="red") +
+  scale_x_log10() +
+  ggtitle("RMSE")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
